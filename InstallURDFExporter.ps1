@@ -1,32 +1,33 @@
 try {
-    # Temporarily allow script execution
-    $currentPolicy = Get-ExecutionPolicy
-    if ($currentPolicy -ne "Unrestricted" -and $currentPolicy -ne "Bypass") {
-        Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
-    }
-
-    $destination = "${env:APPDATA}\Autodesk\Autodesk Fusion 360\API\Scripts\Fusion_URDF_Exporter_ROS2"
+    # Paths are relative to this script, so it works from any working directory
+    $source = Join-Path $PSScriptRoot "Fusion_URDF_Exporter_ROS2"
+    $scripts = "${env:APPDATA}\Autodesk\Autodesk Fusion 360\API\Scripts"
+    $destination = Join-Path $scripts "Fusion_URDF_Exporter_ROS2"
+    $staging = "$destination.new"
 
     Write-Host "Starting installation process..." -ForegroundColor Green
 
-    # Check if the destination folder exists and remove it
+    if (-not (Test-Path -Path $source)) {
+        throw "Cannot find $source. Keep this script next to the Fusion_URDF_Exporter_ROS2 folder."
+    }
+    New-Item -ItemType Directory -Force -Path $scripts | Out-Null
+
+    # Copy to a staging folder first, so a failed copy leaves the existing install in place
+    if (Test-Path -Path $staging) {
+        Remove-Item -Path $staging -Recurse -Force
+    }
+    Copy-Item -Path $source -Destination $staging -Recurse
+
+    # Replace the existing folder
     if (Test-Path -Path $destination) {
-        Write-Host "Existing folder found. Removing..." -ForegroundColor Yellow
+        Write-Host "Existing folder found. Replacing..." -ForegroundColor Yellow
         Remove-Item -Path $destination -Recurse -Force
     }
-
-    # Copy the new folder to the destination
-    Copy-Item ".\Fusion_URDF_Exporter_ROS2\" -Destination "${env:APPDATA}\Autodesk\Autodesk Fusion 360\API\Scripts\" -Recurse
+    Rename-Item -Path $staging -NewName "Fusion_URDF_Exporter_ROS2"
     Write-Host "Installation completed successfully!" -ForegroundColor Green
 } catch {
     # Print the error if something goes wrong
     Write-Host "An error occurred during installation: $($_.Exception.Message)" -ForegroundColor Red
-} finally {
-    # Restore the original execution policy
-    if ($currentPolicy -ne "Unrestricted" -and $currentPolicy -ne "Bypass") {
-        Set-ExecutionPolicy -Scope Process -ExecutionPolicy $currentPolicy -Force
-    }
-    Write-Host "Execution policy restored to original state." -ForegroundColor Green
 }
 
 # Exit immediately
