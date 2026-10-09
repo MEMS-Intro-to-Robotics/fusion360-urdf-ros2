@@ -47,7 +47,14 @@ def robot_name_from(design_name):
 def copy_occs(root):
     """
     duplicate all the components
+
+    Returns
+    ----------
+    (new occurrences, [(renamed component, original name)]), for restore_occs
     """
+    new_occs_list = []
+    renamed = []
+
     def copy_body(allOccs, occs, name):
         """
         copy the old occs to new component
@@ -60,25 +67,39 @@ def copy_occs(root):
         # This support even when a component has some occses.
 
         # free the name first: the new component may take the old component's name
-        occs.component.name = 'old_component'
+        if occs.component.name != 'old_component':
+            renamed.append((occs.component, occs.component.name))
+            occs.component.name = 'old_component'
         new_occs = allOccs.addNewComponent(transform)  # this create new occs
         new_occs.component.name = name
-        new_occs = allOccs.item((allOccs.count-1))
+        new_occs_list.append(new_occs)
         for i in range(bodies.count):
             body = bodies.item(i)
             body.copyToComponent(new_occs)
 
     allOccs = root.occurrences
-    oldOccs = []
     # names are taken before any renaming, because link_name reads component names
     coppy_list = [(occs, link_name(occs)) for occs in allOccs]
     for occs, name in coppy_list:
         if occs.bRepBodies.count > 0:
             copy_body(allOccs, occs, name)
-            oldOccs.append(occs)
 
-    for occs in oldOccs:
-        occs.component.name = 'old_component'
+    return new_occs_list, renamed
+
+
+def restore_occs(copied):
+    """
+    undo copy_occs: delete the copied components and give the original
+    components their names back, so the design is left as it was
+    """
+    new_occs_list, renamed = copied
+    for occs in new_occs_list:
+        # rename first so the original names are free even if Fusion keeps the
+        # deleted component around
+        occs.component.name = 'urdf_export_copy'
+        occs.deleteMe()
+    for component, name in renamed:
+        component.name = name
 
 
 def export_stl(design, save_dir, components):

@@ -127,8 +127,11 @@ def run(context):
             utils.update_package_xml(save_dir, package_name)
 
             # Generate STl files
-            utils.copy_occs(root)
-            utils.export_stl(design, save_dir, components)
+            copied = utils.copy_occs(root)
+            try:
+                utils.export_stl(design, save_dir, components)
+            finally:
+                utils.restore_occs(copied)
 
             success_msg = 'Successfully created URDF file and launch file for Gazebo Harmonic'
             ui.messageBox(success_msg, title)
@@ -174,8 +177,11 @@ def run(context):
             utils.update_package_xml(save_dir, package_name)
 
             # Generate STl files
-            utils.copy_occs(root)  
-            utils.export_stl(design, save_dir, components)
+            copied = utils.copy_occs(root)
+            try:
+                utils.export_stl(design, save_dir, components)
+            finally:
+                utils.restore_occs(copied)
             success_msg = 'Successfully created URDF file and launch file for Gazebo Classic'
             ui.messageBox(success_msg, title)
 

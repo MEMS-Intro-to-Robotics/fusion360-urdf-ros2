@@ -19,6 +19,15 @@ ROBOT_NAME = 'example_arm'
 FIXED_BASE = True
 
 
+def snapshot(design):
+    """Component names, occurrence names, body counts, and timeline length."""
+    root = design.rootComponent
+    timeline = design.timeline.count if design.designType == adsk.fusion.DesignTypes.ParametricDesignType else None
+    return (sorted(c.name for c in design.allComponents),
+            [(o.name, o.bRepBodies.count) for o in root.occurrences],
+            timeline)
+
+
 def run(context):
     app = adsk.core.Application.get()
     previous = app.activeDocument
@@ -51,9 +60,18 @@ def run(context):
         utils.update_setup_py(save_dir, package_name)
         utils.update_setup_cfg(save_dir, package_name)
         utils.update_package_xml(save_dir, package_name)
-        utils.copy_occs(root)
-        utils.export_stl(design, save_dir, design.allComponents)
+        before = snapshot(design)
+        copied = utils.copy_occs(root)
+        try:
+            utils.export_stl(design, save_dir, design.allComponents)
+        finally:
+            utils.restore_occs(copied)
+        after = snapshot(design)
         print('exported to ' + save_dir)
+        print('design unchanged by export: %s' % (before == after))
+        if before != after:
+            print('before', before)
+            print('after ', after)
     finally:
         # close only the document this script created
         if doc is not previous and not doc.isSaved:
