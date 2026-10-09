@@ -5,7 +5,7 @@ Created on Sun May 12 20:11:28 2019
 @author: syuntoku
 """
 
-import adsk, re
+import adsk
 from xml.etree.ElementTree import Element, SubElement
 from ..utils import utils
 
@@ -109,7 +109,7 @@ def make_inertial_dict(root, msg):
         occs_dict = {}
         prop = occs.getPhysicalProperties(adsk.fusion.CalculationAccuracy.VeryHighCalculationAccuracy)
         
-        occs_dict['name'] = re.sub('[ :()]', '_', occs.name)
+        occs_dict['name'] = utils.link_name(occs)
 
         mass = prop.mass  # kg
         occs_dict['mass'] = mass
@@ -121,9 +121,6 @@ def make_inertial_dict(root, msg):
         moment_inertia_world = [_ / 10000.0 for _ in [xx, yy, zz, xy, yz, xz] ] ## kg / cm^2 -> kg/m^2
         occs_dict['inertia'] = utils.origin2center_of_mass(moment_inertia_world, center_of_mass, mass)
         
-        if occs.component.name == 'base_link':
-            inertial_dict['base_link'] = occs_dict
-        else:
-            inertial_dict[re.sub('[ :()]', '_', occs.name)] = occs_dict
+        inertial_dict[occs_dict['name']] = occs_dict
 
     return inertial_dict, msg

@@ -98,11 +98,31 @@ to swap component1<=>component2"
 
             joint = Joint.Joint(name=j, joint_type = joint_type, xyz=xyz, \
             axis=joints_dict[j]['axis'], parent=parent, child=child, \
-            upper_limit=upper_limit, lower_limit=lower_limit)
+            upper_limit=upper_limit, lower_limit=lower_limit,
+            velocity=joints_dict[j]['velocity'], effort=joints_dict[j]['effort'])
             joint.make_joint_xml()
             joint.make_transmission_xml()
             f.write(joint.joint_xml)
             f.write('\n')
+
+def write_world_link(file_name):
+    """
+    Write a world link and a fixed joint to base_link, which holds the robot
+    in place in Gazebo. Leave it out for mobile robots.
+
+
+    Parameters
+    ----------
+    file_name: str
+        urdf full path
+    """
+    with open(file_name, mode='a') as f:
+        f.write('<link name="world"/>\n')
+        f.write('<joint name="world_fixed" type="fixed">\n')
+        f.write('  <parent link="world"/>\n')
+        f.write('  <child link="base_link"/>\n')
+        f.write('</joint>\n')
+        f.write('\n')
 
 def write_gazebo_endtag(file_name):
     """
@@ -118,7 +138,7 @@ def write_gazebo_endtag(file_name):
         f.write('</robot>\n')
 
 
-def write_urdf(joints_dict, links_xyz_dict, inertial_dict, package_name, robot_name, save_dir):
+def write_urdf(joints_dict, links_xyz_dict, inertial_dict, package_name, robot_name, save_dir, fixed_base=False):
     try: os.mkdir(save_dir + '/urdf')
     except: pass
 
@@ -135,11 +155,13 @@ def write_urdf(joints_dict, links_xyz_dict, inertial_dict, package_name, robot_n
         f.write('<xacro:include filename="$(find {})/urdf/{}.gazebo" />'.format(package_name, robot_name))
         f.write('\n')
 
+    if fixed_base:
+        write_world_link(file_name)
     write_link_urdf(joints_dict, repo, links_xyz_dict, file_name, inertial_dict)
     write_joint_urdf(joints_dict, repo, links_xyz_dict, file_name)
     write_gazebo_endtag(file_name)
 
-def write_urdf_sim(joints_dict, links_xyz_dict, inertial_dict, package_name, robot_name, save_dir):
+def write_urdf_sim(joints_dict, links_xyz_dict, inertial_dict, package_name, robot_name, save_dir, fixed_base=False):
     try: os.mkdir(save_dir + '/urdf')
     except: pass
 
@@ -156,6 +178,8 @@ def write_urdf_sim(joints_dict, links_xyz_dict, inertial_dict, package_name, rob
         f.write('<xacro:include filename="$(find {})/urdf/{}.gazebo" />'.format(package_name, robot_name))
         f.write('\n')
 
+    if fixed_base:
+        write_world_link(file_name)
     write_link_urdf(joints_dict, repo, links_xyz_dict, file_name, inertial_dict)
     write_joint_urdf(joints_dict, repo, links_xyz_dict, file_name)
     write_gazebo_endtag(file_name)

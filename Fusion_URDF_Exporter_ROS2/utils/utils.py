@@ -13,11 +13,42 @@ from shutil import copytree
 import fileinput
 import sys
 
+def link_name(occ):
+    """
+    URDF link name (and mesh file name) for a top-level occurrence.
+
+    A component named base_link gives base_link. A component used once gives
+    its own name (link1:1 -> link1). A component used more than once gives the
+    occurrence name with ' :()' replaced by '_' (wheel:2 -> wheel_2).
+    """
+    comp = occ.component
+    if comp.name == 'base_link':
+        return 'base_link'
+    root = comp.parentDesign.rootComponent
+    if root.allOccurrencesByComponent(comp).count == 1:
+        return re.sub('[ :()]', '_', comp.name)
+    return re.sub('[ :()]', '_', occ.name)
+
+
+def robot_name_from(design_name):
+    """
+    Default robot name from the design name: drop a trailing version
+    ('My Arm v3' -> 'My Arm'), lowercase, and keep [a-z0-9_].
+    """
+    name = re.sub(r'\s+v\d+$', '', design_name.strip()).lower()
+    name = re.sub('[^a-z0-9_]+', '_', name).strip('_')
+    if not name:
+        name = 'robot'
+    elif not name[0].isalpha():
+        name = 'robot_' + name
+    return name
+
+
 def copy_occs(root):
     """
     duplicate all the components
     """
-    def copy_body(allOccs, occs):
+    def copy_body(allOccs, occs, name):
         """
         copy the old occs to new component
         """
@@ -28,12 +59,10 @@ def copy_occs(root):
         # Create new components from occs
         # This support even when a component has some occses.
 
+        # free the name first: the new component may take the old component's name
+        occs.component.name = 'old_component'
         new_occs = allOccs.addNewComponent(transform)  # this create new occs
-        if occs.component.name == 'base_link':
-            occs.component.name = 'old_component'
-            new_occs.component.name = 'base_link'
-        else:
-            new_occs.component.name = re.sub('[ :()]', '_', occs.name)
+        new_occs.component.name = name
         new_occs = allOccs.item((allOccs.count-1))
         for i in range(bodies.count):
             body = bodies.item(i)
@@ -41,10 +70,11 @@ def copy_occs(root):
 
     allOccs = root.occurrences
     oldOccs = []
-    coppy_list = [occs for occs in allOccs]
-    for occs in coppy_list:
+    # names are taken before any renaming, because link_name reads component names
+    coppy_list = [(occs, link_name(occs)) for occs in allOccs]
+    for occs, name in coppy_list:
         if occs.bRepBodies.count > 0:
-            copy_body(allOccs, occs)
+            copy_body(allOccs, occs, name)
             oldOccs.append(occs)
 
     for occs in oldOccs:
@@ -125,7 +155,7 @@ def origin2center_of_mass(inertia, center_of_mass, mass):
     z = center_of_mass[2]
     translation_matrix = [y**2+z**2, x**2+z**2, x**2+y**2,
                          -x*y, -y*z, -x*z]
-    return [ round(i - mass*t, 6) for i, t in zip(inertia, translation_matrix)]
+    return [i - mass*t for i, t in zip(inertia, translation_matrix)]
 
 
 def prettify(elem):

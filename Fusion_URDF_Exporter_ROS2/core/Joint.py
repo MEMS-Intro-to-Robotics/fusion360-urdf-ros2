@@ -9,8 +9,19 @@ import adsk, re
 from xml.etree.ElementTree import Element, SubElement
 from ..utils import utils
 
+# Limits written when the design has no <joint>_velocity / <joint>_effort user
+# parameter. Units are rad/s and N m for revolute joints, m/s and N for prismatic.
+# The velocity is not a whole number on purpose: the MoveIt Setup Assistant copies it
+# into joint_limits.yaml through yaml-cpp, which writes 1.0 as 1, and move_group
+# then rejects the integer.
+DEFAULT_VELOCITY = 1.5
+# In Gazebo, gz_ros2_control's position interface cannot exceed this effort; 10 N m
+# let the 8.75 kg course example arm fall at the shoulder (about 17 N m needed).
+DEFAULT_EFFORT = 100.0
+
 class Joint:
-    def __init__(self, name, xyz, axis, parent, child, joint_type, upper_limit, lower_limit):
+    def __init__(self, name, xyz, axis, parent, child, joint_type, upper_limit, lower_limit,
+                 velocity=DEFAULT_VELOCITY, effort=DEFAULT_EFFORT):
         """
         Attributes
         ----------
@@ -41,6 +52,8 @@ class Joint:
         self.axis = axis  # for 'revolute' and 'continuous'
         self.upper_limit = upper_limit  # for 'revolute' and 'prismatic'
         self.lower_limit = lower_limit  # for 'revolute' and 'prismatic'
+        self.velocity = velocity  # for 'revolute' and 'prismatic'
+        self.effort = effort  # for 'revolute' and 'prismatic'
         
     def make_joint_xml(self):
         """
@@ -60,8 +73,9 @@ class Joint:
             axis.attrib = {'xyz':' '.join([str(_) for _ in self.axis])}
         if self.type == 'revolute' or self.type == 'prismatic':
             limit = SubElement(joint, 'limit')
-            limit.attrib = {'upper': str(self.upper_limit), 'lower': str(self.lower_limit),
-                            'effort': '100', 'velocity': '100'}
+            # decimals for readability; MoveIt still gets whole numbers as integers (see DEFAULT_VELOCITY)
+            limit.attrib = {'upper': str(float(self.upper_limit)), 'lower': str(float(self.lower_limit)),
+                            'effort': str(float(self.effort)), 'velocity': str(float(self.velocity))}
             
         self.joint_xml = "\n".join(utils.prettify(joint).split("\n")[1:])
 
@@ -113,7 +127,7 @@ def make_joints_dict(root, msg):
     Returns
     ----------
     joints_dict: 
-        {name: {type, axis, upper_limit, lower_limit, parent, child, xyz}}
+        {name: {type, axis, upper_limit, lower_limit, velocity, effort, parent, child, xyz}}
     msg: str
         Tell the status
     """
@@ -123,6 +137,11 @@ def make_joints_dict(root, msg):
     'PinSlot', 'Planner', 'Ball']  # these are the names in urdf
 
     joints_dict = {}
+    user_params = root.parentDesign.userParameters
+
+    def user_param(name, default):
+        param = user_params.itemByName(name)
+        return float(param.value) if param else default
     
     for joint in root.joints:
         joint_dict = {}
@@ -133,6 +152,9 @@ def make_joints_dict(root, msg):
         joint_dict['axis'] = [0, 0, 0]
         joint_dict['upper_limit'] = 0.0
         joint_dict['lower_limit'] = 0.0
+        param_prefix = re.sub('[^A-Za-z0-9_]', '_', joint.name)
+        joint_dict['velocity'] = user_param(param_prefix + '_velocity', DEFAULT_VELOCITY)
+        joint_dict['effort'] = user_param(param_prefix + '_effort', DEFAULT_EFFORT)
         
         # support  "Revolute", "Rigid" and "Slider"
         if joint_type == 'revolute':
@@ -144,10 +166,10 @@ def make_joints_dict(root, msg):
                 joint_dict['upper_limit'] = round(joint.jointMotion.rotationLimits.maximumValue, 6)
                 joint_dict['lower_limit'] = round(joint.jointMotion.rotationLimits.minimumValue, 6)
             elif max_enabled and not min_enabled:
-                msg = joint.name + 'is not set its lower limit. Please set it and try again.'
+                msg = joint.name + ' is not set its lower limit. Please set it and try again.'
                 break
             elif not max_enabled and min_enabled:
-                msg = joint.name + 'is not set its upper limit. Please set it and try again.'
+                msg = joint.name + ' is not set its upper limit. Please set it and try again.'
                 break
             else:  # if there is no angle limit
                 joint_dict['type'] = 'continuous'
@@ -161,19 +183,16 @@ def make_joints_dict(root, msg):
                 joint_dict['upper_limit'] = round(joint.jointMotion.slideLimits.maximumValue/100, 6)
                 joint_dict['lower_limit'] = round(joint.jointMotion.slideLimits.minimumValue/100, 6)
             elif max_enabled and not min_enabled:
-                msg = joint.name + 'is not set its lower limit. Please set it and try again.'
+                msg = joint.name + ' is not set its lower limit. Please set it and try again.'
                 break
             elif not max_enabled and min_enabled:
-                msg = joint.name + 'is not set its upper limit. Please set it and try again.'
+                msg = joint.name + ' is not set its upper limit. Please set it and try again.'
                 break
         elif joint_type == 'fixed':
             pass
         
-        if joint.occurrenceTwo.component.name == 'base_link':
-            joint_dict['parent'] = 'base_link'
-        else:
-            joint_dict['parent'] = re.sub('[ :()]', '_', joint.occurrenceTwo.name)
-        joint_dict['child'] = re.sub('[ :()]', '_', joint.occurrenceOne.name)
+        joint_dict['parent'] = utils.link_name(joint.occurrenceTwo)
+        joint_dict['child'] = utils.link_name(joint.occurrenceOne)
         
         
         #There seem to be a problem with geometryOrOriginTwo. To calcualte the correct orogin of the generated stl files following approach was used.

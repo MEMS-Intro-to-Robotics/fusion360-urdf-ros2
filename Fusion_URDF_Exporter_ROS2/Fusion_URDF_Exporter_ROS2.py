@@ -12,8 +12,8 @@ from .core import Link, Joint, Write
 # If there is no 'body' in the root component, maybe the corrdinates are wrong.
 """
 
-# joint effort: 100
-# joint velocity: 100
+# joint effort: 100 (Joint.DEFAULT_EFFORT), or the <joint>_effort user parameter
+# joint velocity: 1.5 (Joint.DEFAULT_VELOCITY), or the <joint>_velocity user parameter
 # supports "Revolute", "Rigid" and "Slider" joint types
 
 # I'm not sure how prismatic joint acts if there is no limit in fusion model
@@ -41,10 +41,6 @@ def run(context):
 
 
 
-        # set the names
-        robot_name = root.name.split()[0]
-        package_name = robot_name + '_description'
-
         # Show welcome message
         welcome_msg = ("Welcome to the Fusion 'Fusion 360 -> ROS 2 URDF Script' plugin.\n"
                        "\n"
@@ -55,6 +51,20 @@ def run(context):
                        "Press OK to continue or Cancel to quit.")
         if ui.messageBox(welcome_msg, title, adsk.core.MessageBoxButtonTypes.OKCancelButtonType) != adsk.core.DialogResults.DialogOK:
             return
+
+        # set the names
+        name_msg = ("Robot name. The package will be named <robot name>_description.\n"
+                    "Use lowercase letters, digits, and underscores.")
+        robot_name, cancelled = ui.inputBox(name_msg, title, utils.robot_name_from(root.name))
+        if cancelled:
+            return
+        robot_name = utils.robot_name_from(robot_name)
+        package_name = robot_name + '_description'
+
+        # Ask whether the base is fixed
+        fixed_msg = ("Fix base_link to the world?\n"
+                     "Press Yes for a robot arm, No for a mobile robot.")
+        fixed_base = ui.messageBox(fixed_msg, title, adsk.core.MessageBoxButtonTypes.YesNoButtonType) == adsk.core.DialogResults.DialogYes
 
         # Show folder browse message
         browse_msg = "Press Ok to browse the folder for saving the ROS package, cancel to quit."
@@ -103,7 +113,7 @@ def run(context):
 
             # --------------------
             # Generate URDF
-            Write.write_urdf_sim(joints_dict, links_xyz_dict, inertial_dict, package_name, robot_name, save_dir)
+            Write.write_urdf_sim(joints_dict, links_xyz_dict, inertial_dict, package_name, robot_name, save_dir, fixed_base)
             Write.write_materials_xacro(joints_dict, links_xyz_dict, inertial_dict, package_name, robot_name, save_dir)
             Write.write_ros2control_xacro(joints_dict, links_xyz_dict, inertial_dict, package_name, robot_name, save_dir)
             Write.write_gazebo_sim_xacro(joints_dict, links_xyz_dict, inertial_dict, package_name, robot_name, save_dir)
@@ -150,7 +160,7 @@ def run(context):
 
             # --------------------
             # Generate URDF
-            Write.write_urdf(joints_dict, links_xyz_dict, inertial_dict, package_name, robot_name, save_dir)
+            Write.write_urdf(joints_dict, links_xyz_dict, inertial_dict, package_name, robot_name, save_dir, fixed_base)
             Write.write_materials_xacro(joints_dict, links_xyz_dict, inertial_dict, package_name, robot_name, save_dir)
             Write.write_transmissions_xacro(joints_dict, links_xyz_dict, inertial_dict, package_name, robot_name, save_dir)
             Write.write_gazebo_xacro(joints_dict, links_xyz_dict, inertial_dict, package_name, robot_name, save_dir)
